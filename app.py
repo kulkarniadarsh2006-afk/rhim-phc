@@ -705,12 +705,20 @@ def api_update_request_status(req_id):
 @login_required
 def api_ai_sync():
     """
-    Submits PHC data payload to RHIM AI Platform.
-    Builds compiled dataset of inventory, consumption, patient statistics, disease trends, and shortage alerts.
+    Submits PHC data payload to RHIM AI Platform via Supabase transport layer.
+    1. Gathers current PHC inventory data.
+    2. Gathers OPD statistics.
+    3. Gathers disease reports.
+    4. Saves sync records to Supabase.
+    5. Marks the PHC as synced locally.
+    6. Returns success confirmation.
     """
     phc_id = session['phc_id']
+    phc_code = session.get('phc_code', 'UNKNOWN')
+    phc_name = session.get('phc_name', 'Unknown PHC')
+    phc_district = session.get('phc_district', 'Unknown')
     
-    # 1. Fetch current inventory details
+    # 1. Gather current inventory data
     inventory_data = db.query(
         """SELECT i.batch_number, i.current_stock, i.min_threshold_stock, i.expiry_date, i.daily_avg_consumption,
            m.name, m.category, m.dosage_form
@@ -719,30 +727,30 @@ def api_ai_sync():
         (phc_id,), fetch_all=True
     )
     
-    # 2. Fetch patient statistics (past 30 days)
+    # 2. Gather OPD patient statistics (past 30 days)
     patient_data = db.query(
         "SELECT date, opd_count, male_count, female_count, child_count FROM patient_statistics WHERE phc_id = %s ORDER BY date DESC LIMIT 30",
         (phc_id,), fetch_all=True
     )
     
-    # 3. Fetch disease trend data (past 6 months)
+    # 3. Gather disease trend reports (past 6 months)
     disease_data = db.query(
         "SELECT date, disease_category, cases_reported FROM disease_trends WHERE phc_id = %s ORDER BY date DESC",
         (phc_id,), fetch_all=True
     )
     
-    # 4. Fetch active shortage alerts
+    # 4. Gather active shortage alerts
     alert_data = db.query(
         "SELECT alert_level, status_message, days_remaining, created_at FROM shortage_alerts WHERE phc_id = %s AND resolved_at IS NULL",
         (phc_id,), fetch_all=True
     )
     
-    # Construct compiled synchronization payload
+    # Construct the full sync payload
     now = datetime.now()
     payload_dict = {
-        "phc_code": session['username'] or "PHC-KAN-001",
-        "phc_name": session['phc_name'],
-        "district": session['phc_district'],
+        "phc_code": phc_code,
+        "phc_name": phc_name,
+        "district": phc_district,
         "sync_timestamp": now.strftime('%Y-%m-%d %H:%M:%S'),
         "data": {
             "inventory": inventory_data,
@@ -751,29 +759,66 @@ def api_ai_sync():
             "shortage_alerts": alert_data
         }
     }
-    
     payload_json = json.dumps(payload_dict)
-    
-    # Simulate API Request to central gateway
-    # If this were real, we'd do requests.post('https://api.medireach.ai/v1/sync', json=payload_dict)
-    # Since it's a simulator, we log the transaction in our database tables and return success.
     
     tx_hash = "tx_rhim_ai_" + now.strftime('%y%m%d%H%M%S') + "_" + str(random_hex(6))
     
     try:
+        # 4. Push sync data to Supabase as the transport layer
+        sync_success, sync_details = db.push_sync_to_supabase(
+            phc_code=phc_code,
+            phc_name=phc_name,
+            district=phc_district,
+            inventory_data=inventory_data,
+            disease_data=disease_data,
+            patient_data=patient_data,
+            alert_data=alert_data
+        )
+        
+        summary = sync_details.get('summary', {})
+        total_records = summary.get('total_records_synced', 0)
+        sync_status = summary.get('status', 'unknown')
+        
+        # Build response message
+        if sync_success:
+            status_text = "Success"
+            response_msg = f"Supabase Gateway Synced. {total_records} records transmitted. Sync ID: {tx_hash}"
+        else:
+            status_text = "Partial"
+            sync_errors = summary.get('errors', [])
+            response_msg = f"Supabase Gateway Partial Sync. {total_records} records transmitted. Errors: {'; '.join(sync_errors)}. Sync ID: {tx_hash}"
+        
+        # 5. Save sync record locally (mark PHC as synced)
         db.execute(
             """INSERT INTO ai_submissions (phc_id, submission_timestamp, payload, status, response_message)
                VALUES (%s, %s, %s, %s, %s)""",
-            (phc_id, now, payload_json, "Success", f"Gateway Received. Sync ID: {tx_hash}")
+            (phc_id, now, payload_json, status_text, response_msg)
         )
         
+        # 6. Return success confirmation
         return jsonify({
             "success": True,
-            "message": "Data synchronized successfully with RHIM AI Central Platform.",
+            "message": f"Data synchronized with MediReach AI via Supabase. {total_records} records pushed.",
             "transaction_hash": tx_hash,
-            "timestamp": now.strftime('%H:%M:%S')
+            "timestamp": now.strftime('%H:%M:%S'),
+            "supabase_sync": {
+                "inventory": sync_details.get('inventory'),
+                "disease_outbreaks": sync_details.get('disease_outbreaks'),
+                "status": sync_status,
+                "total_records": total_records
+            }
         })
     except Exception as e:
+        # Log the failed sync attempt locally
+        try:
+            db.execute(
+                """INSERT INTO ai_submissions (phc_id, submission_timestamp, payload, status, response_message)
+                   VALUES (%s, %s, %s, %s, %s)""",
+                (phc_id, now, payload_json, "Failed", f"Sync Error: {str(e)}")
+            )
+        except Exception:
+            pass
+            
         return jsonify({
             "success": False,
             "error": str(e)

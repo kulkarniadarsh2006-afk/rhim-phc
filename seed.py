@@ -7,6 +7,9 @@ from database import db
 def seed_data():
     print("Starting full database seeding for all network PHCs...")
     
+    # Initialize database tables if they do not exist (critical for fresh Render builds)
+    db.init_db()
+    
     # 1. Clear existing data (to allow clean re-seeding)
     print("Clearing old tables...")
     tables = [

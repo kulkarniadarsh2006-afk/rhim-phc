@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+
+{% block title %}PHC Directory - RHIM.PHC{% endblock %}
+{% block header_title %}Supabase PHC Directory{% endblock %}
+{% block header_subtitle %}List of all active Primary Health Centres registered on the Supabase cloud network.{% endblock %}
+
+{% block content %}
+<div class="glass-panel">
+    <div class="panel-header" style="flex-wrap: wrap; gap: 16px;">
+        <h2>
+            <i data-lucide="building" style="color: var(--primary); width: 20px; height: 20px;"></i>
+            Integrated Health Centres Directory
+        </h2>
+        
+        <!-- Search and Filter Bar -->
+        <div style="display: flex; gap: 12px; max-width: 400px; width: 100%;">
+            <div style="position: relative; width: 100%;">
+                <input type="text" id="directorySearch" class="form-control" placeholder="Search by name, code, or district..." onkeyup="filterDirectory()" style="padding-left: 36px;">
+                <i data-lucide="search" style="position: absolute; left: 12px; top: 12px; width: 16px; height: 16px; color: var(--text-muted);"></i>
+            </div>
+        </div>
+    </div>
+    
+    <div class="table-responsive" style="max-height: 550px; overflow-y: auto;">
+        <table class="custom-table" id="directoryTable">
+            <thead>
+                <tr>
+                    <th>PHC Name</th>
+                    <th>Unique Code</th>
+                    <th>District</th>
+                    <th>Mandal / Village</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for phc in phcs %}
+                    <tr class="phc-row">
+                        <td style="font-weight: 600; color: var(--text-primary);" class="phc-name">
+                            {{ phc.name }}
+                        </td>
+                        <td style="font-family: monospace; font-size: 13px;" class="phc-code">{{ phc.code }}</td>
+                        <td class="phc-district">{{ phc.district }}</td>
+                        <td class="phc-state">{{ phc.state }}</td>
+                    </tr>
+                {% else %}
+                    <tr>
+                        <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 48px;">
+                            No PHC records found in the directory.
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Table Footer stats -->
+    <div style="margin-top: 16px; display: flex; justify-content: space-between; font-size: 12px; color: var(--text-secondary);">
+        <span id="showingCount">Showing all {{ phcs|length }} registered health centres</span>
+        <span>Supabase Sync Status: <strong style="color: var(--success);">ACTIVE</strong></span>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function filterDirectory() {
+        const input = document.getElementById("directorySearch");
+        const filter = input.value.toLowerCase();
+        const rows = document.querySelectorAll(".phc-row");
+        let visibleCount = 0;
+        
+        rows.forEach(row => {
+            const name = row.querySelector(".phc-name").textContent.toLowerCase();
+            const code = row.querySelector(".phc-code").textContent.toLowerCase();
+            const district = row.querySelector(".phc-district").textContent.toLowerCase();
+            const state = row.querySelector(".phc-state").textContent.toLowerCase();
+            
+            if (name.includes(filter) || code.includes(filter) || district.includes(filter) || state.includes(filter)) {
+                row.style.display = "";
+                visibleCount++;
+            } else {
+                row.style.display = "none";
+            }
+        });
+        
+        const countSpan = document.getElementById("showingCount");
+        countSpan.textContent = `Showing ${visibleCount} of ${rows.length} registered health centres`;
+    }
+</script>
+{% endblock %}

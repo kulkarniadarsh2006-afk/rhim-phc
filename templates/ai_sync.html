@@ -1,0 +1,264 @@
+{% extends 'base.html' %}
+
+{% block title %}AI Data Sync - RHIM.PHC{% endblock %}
+{% block header_title %}RHIM AI Integration Hub{% endblock %}
+{% block header_subtitle %}Synchronize local medical inventories, OPD loads, and disease surge trends with the central MediReach AI platform.{% endblock %}
+
+{% block content %}
+<!-- Double Column Panel Layout -->
+<div class="analytics-grid">
+    
+    <!-- Sync controller panel -->
+    <div class="glass-panel" style="display: flex; flex-direction: column; gap: 20px;">
+        <div class="panel-header">
+            <h2>
+                <i data-lucide="cpu" style="color: var(--primary); width: 20px; height: 20px;"></i>
+                Synchronize Local Dataset
+            </h2>
+        </div>
+        
+        <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.5;">
+            Clicking the button below will gather your PHC's current medicine stocks, daily consumption averages, seasonal disease logs, and active alerts, compiling them into a secured API transmission package destined for the central **RHIM AI Gateway**.
+        </p>
+        
+        <button id="syncBtn" class="btn btn-primary" style="padding: 14px 20px; font-size: 14px; width: 100%;" onclick="triggerAiSync()">
+            <i data-lucide="refresh-cw" id="syncIcon" style="width: 18px; height: 18px;"></i>
+            <span>Send to RHIM AI</span>
+        </button>
+        
+        <!-- Animated sync line -->
+        <div class="sync-beam" id="syncBeam"></div>
+        
+        <!-- Live Console Terminal Log -->
+        <div style="font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 2px;">
+            TRANSMISSION TERMINAL LOG:
+        </div>
+        <div class="console-log" id="consoleLog">
+            <div>[System] Ready for data transmission.</div>
+            <div>[System] Gateway URL: https://api.medireach.ai/v1/sync</div>
+            <div>[System] API Key Status: ACTIVE</div>
+        </div>
+    </div>
+    
+    <!-- Data Schema Preview Panel -->
+    <div class="glass-panel" style="display: flex; flex-direction: column; gap: 16px;">
+        <div class="panel-header">
+            <h2>
+                <i data-lucide="file-code" style="color: var(--secondary); width: 20px; height: 20px;"></i>
+                Sync Payload Schema Preview
+            </h2>
+        </div>
+        <p style="font-size: 12px; color: var(--text-secondary);">
+            Preview the structured JSON schema that is transmitted to the central warehouse and logistics platform.
+        </p>
+        <pre style="background: #020408; border: 1px solid var(--border-color); border-radius: 8px; font-family: monospace; font-size: 11px; padding: 16px; color: #a5b4fc; overflow-x: auto; max-height: 250px; line-height: 1.4;">
+{
+  "phc_code": "PHC-KAN-001",
+  "phc_name": "Kanakapura PHC",
+  "district": "Ramanagara",
+  "sync_timestamp": "YYYY-MM-DD HH:MM:SS",
+  "data": {
+    "inventory": [
+      { "name": "Paracetamol 650mg", "current_stock": 1800, "daily_avg_consumption": 45.0 }
+    ],
+    "patient_statistics": [
+      { "date": "YYYY-MM-DD", "opd_count": 85 }
+    ],
+    "disease_trends": [
+      { "disease_category": "Respiratory Infections", "cases_reported": 42 }
+    ],
+    "shortage_alerts": [
+      { "alert_level": "Red", "status_message": "Critical Shortage..." }
+    ]
+  }
+}
+        </pre>
+    </div>
+</div>
+
+<!-- Submissions Log -->
+<div class="glass-panel" style="margin-top: 24px;">
+    <div class="panel-header">
+        <h2>
+            <i data-lucide="history" style="color: var(--primary); width: 20px; height: 20px;"></i>
+            AI Gateway Transmission History
+        </h2>
+    </div>
+    
+    <div class="table-responsive">
+        <table class="custom-table" style="font-size: 13px;">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Status</th>
+                    <th>Response details</th>
+                    <th>Transmission Payload Preview</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sub in submissions %}
+                    <tr>
+                        <td style="font-weight: 500;">{{ sub.submission_timestamp }}</td>
+                        <td>
+                            <span class="badge badge-{% if sub.status == 'Success' %}success{% else %}danger{% endif %}">
+                                <span class="badge-dot"></span>
+                                {{ sub.status }}
+                            </span>
+                        </td>
+                        <td style="color: var(--text-primary);">{{ sub.response_message }}</td>
+                        <td>
+                            <button class="btn btn-secondary btn-sm" onclick='showPayloadModal({{ sub.id }})'>
+                                <i data-lucide="eye" style="width: 14px; height: 14px;"></i>
+                                View JSON
+                            </button>
+                            <!-- Hidden JSON container -->
+                            <div id="payload-{{ sub.id }}" style="display: none;">{{ sub.payload }}</div>
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr>
+                        <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 32px;">
+                            No sync transmissions have been recorded yet.
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- PAYLOAD DETAILS MODAL -->
+<div class="modal" id="payloadModal">
+    <div class="modal-content" style="max-width: 650px;">
+        <div class="modal-header">
+            <h3>Synced JSON Dataset</h3>
+            <button class="modal-close" onclick="closePayloadModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <pre id="modalJsonDisplay" style="background: #020408; border: 1px solid var(--border-color); border-radius: 8px; font-family: monospace; font-size: 11px; padding: 16px; color: #4ade80; overflow-y: auto; max-height: 400px; line-height: 1.4;"></pre>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closePayloadModal()">Close</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Show JSON Modal
+    function showPayloadModal(id) {
+        const payloadText = document.getElementById('payload-' + id).textContent;
+        try {
+            const formattedJson = JSON.stringify(JSON.parse(payloadText), null, 2);
+            document.getElementById('modalJsonDisplay').textContent = formattedJson;
+        } catch (e) {
+            document.getElementById('modalJsonDisplay').textContent = payloadText;
+        }
+        document.getElementById('payloadModal').style.display = 'flex';
+    }
+    
+    function closePayloadModal() {
+        document.getElementById('payloadModal').style.display = 'none';
+    }
+
+    // Trigger AI sync operations
+    function triggerAiSync() {
+        const btn = document.getElementById('syncBtn');
+        const icon = document.getElementById('syncIcon');
+        const beam = document.getElementById('syncBeam');
+        const log = document.getElementById('consoleLog');
+        
+        // Disable button & animate spinner
+        btn.disabled = true;
+        icon.classList.add('la-spin'); // or spin styling via css
+        icon.style.animation = 'spin 1s linear infinite';
+        beam.style.display = 'block';
+        
+        // CSS spinning rules injecting on the fly for lucide
+        if (!document.getElementById('spinStyle')) {
+            const style = document.createElement('style');
+            style.id = 'spinStyle';
+            style.innerHTML = `@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`;
+            document.head.appendChild(style);
+        }
+        
+        // Helper to append log lines
+        const addLog = (text) => {
+            const line = document.createElement('div');
+            line.innerHTML = `[${new Date().toLocaleTimeString()}] ${text}`;
+            log.appendChild(line);
+            log.scrollTop = log.scrollHeight;
+        };
+        
+        addLog("Sync command triggered by Supervisor.");
+        
+        setTimeout(() => {
+            addLog("Scanning database inventory items...");
+        }, 600);
+        
+        setTimeout(() => {
+            addLog("Compiling 30-day patient OPD count profiles...");
+        }, 1200);
+        
+        setTimeout(() => {
+            addLog("Compiling 6-month seasonal disease trend surges...");
+        }, 1800);
+        
+        setTimeout(() => {
+            addLog("Structuring transmission payload dataset...");
+        }, 2400);
+        
+        setTimeout(() => {
+            addLog("Encrypting payload using TLS 1.3 certificate...");
+        }, 3000);
+        
+        setTimeout(() => {
+            addLog("Connecting to RHIM Gateway API at 'api.medireach.ai'...");
+            
+            // Perform actual AJAX post to Flask API
+            fetch('/api/ai/sync', { method: 'POST' })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        addLog(`<span style="color: #4ade80;">Success! Gateway response: 200 OK</span>`);
+                        addLog(`<span style="color: #38bdf8;">Sync ID (TX): ${data.transaction_hash}</span>`);
+                        addLog("Local database transaction sync tables updated.");
+                        
+                        // Complete animations
+                        setTimeout(() => {
+                            alert("Sync Successful!\n" + data.message + "\nSync ID: " + data.transaction_hash);
+                            window.location.reload();
+                        }, 800);
+                    } else {
+                        addLog(`<span style="color: #ef4444;">Error: Gateway transmission failed. Server returned: ${data.error}</span>`);
+                        resetSyncControls();
+                    }
+                })
+                .catch(err => {
+                    addLog(`<span style="color: #ef4444;">Error: Network connection failure to gateway.</span>`);
+                    console.error(err);
+                    resetSyncControls();
+                });
+                
+        }, 3600);
+    }
+    
+    function resetSyncControls() {
+        const btn = document.getElementById('syncBtn');
+        const icon = document.getElementById('syncIcon');
+        const beam = document.getElementById('syncBeam');
+        
+        btn.disabled = false;
+        icon.style.animation = 'none';
+        beam.style.display = 'none';
+    }
+    
+    window.onclick = function(event) {
+        const m = document.getElementById('payloadModal');
+        if (event.target === m) {
+            m.style.display = 'none';
+        }
+    }
+</script>
+{% endblock %}

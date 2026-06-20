@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RHIM.PHC - Portal Login</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body {
+            justify-content: center;
+            align-items: center;
+            background: radial-gradient(circle at center, #0b1528 0%, #050812 100%);
+        }
+        .login-container {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            width: 100%;
+            max-width: 440px;
+            padding: 20px;
+        }
+        .login-logo-header {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            text-align: center;
+            margin-bottom: 8px;
+        }
+        .login-logo {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            color: white;
+            font-size: 28px;
+            box-shadow: 0 8px 30px rgba(14, 165, 233, 0.4);
+        }
+        .login-title {
+            font-size: 24px;
+            font-weight: 700;
+            background: linear-gradient(to right, #ffffff, #cbd5e1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .login-subtitle {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        /* Quick Login Grid */
+        .quick-login-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .quick-role-btn {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px 8px;
+            cursor: pointer;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            transition: var(--transition-fast);
+        }
+        .quick-role-btn:hover {
+            background: rgba(14, 165, 233, 0.08);
+            border-color: var(--primary);
+        }
+        .quick-role-icon {
+            color: var(--primary);
+            width: 20px;
+            height: 20px;
+        }
+        .quick-role-name {
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        .quick-role-user {
+            font-size: 9px;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Flashes toast notifications -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <ul class="flashes">
+          {% for category, message in messages %}
+            <li class="flash-message {{ category }}">
+                {{ message }}
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+
+    <div class="login-container">
+        
+        <div class="login-logo-header">
+            <div class="login-logo">H</div>
+            <div>
+                <h1 class="login-title">RHIM.PHC Portal</h1>
+                <p class="login-subtitle">Primary Health Centre Inventory & AI Gateway</p>
+            </div>
+        </div>
+
+        <div class="glass-panel">
+            <form action="{{ url_for('login') }}" method="POST" id="loginForm">
+                <div class="form-group">
+                    <label for="username">USERNAME</label>
+                    <input type="text" id="username" name="username" class="form-control" placeholder="Enter username" required autocomplete="username">
+                </div>
+                
+                <div class="form-group" style="margin-bottom: 24px;">
+                    <label for="password">PASSWORD</label>
+                    <input type="password" id="password" name="password" class="form-control" placeholder="Enter password" required autocomplete="current-password">
+                </div>
+                
+                <button type="submit" class="btn btn-primary" style="width: 100%; padding: 12px;">
+                    <i data-lucide="shield-check" style="width: 18px; height: 18px;"></i>
+                    Authenticate
+                </button>
+            </form>
+        </div>
+
+        <!-- Demonstration Utility -->
+        <div class="glass-panel" style="padding: 16px; background: rgba(17, 24, 39, 0.3);">
+            <div style="font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; text-align: center;">
+                Simulator Quick-Fill Credentials
+            </div>
+            
+            <div class="quick-login-grid">
+                <div class="quick-role-btn" onclick="quickFill('supervisor')">
+                    <i data-lucide="award" class="quick-role-icon"></i>
+                    <span class="quick-role-name">Supervisor</span>
+                    <span class="quick-role-user">supervisor</span>
+                </div>
+                
+                <div class="quick-role-btn" onclick="quickFill('officer')">
+                    <i data-lucide="stethoscope" class="quick-role-icon"></i>
+                    <span class="quick-role-name">Med Officer</span>
+                    <span class="quick-role-user">officer</span>
+                </div>
+                
+                <div class="quick-role-btn" onclick="quickFill('operator')">
+                    <i data-lucide="database" class="quick-role-icon"></i>
+                    <span class="quick-role-name">Data Operator</span>
+                    <span class="quick-role-user">operator</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        function quickFill(user) {
+            document.getElementById('username').value = user;
+            document.getElementById('password').value = 'password123';
+            
+            // Subtle flash highlight on click
+            const formPanel = document.querySelector('.glass-panel');
+            formPanel.style.borderColor = 'var(--primary)';
+            setTimeout(() => {
+                formPanel.style.borderColor = 'var(--border-color)';
+            }, 300);
+        }
+
+        // Auto-dismiss Flash Alerts
+        setTimeout(function() {
+            const flashes = document.querySelectorAll('.flash-message');
+            flashes.forEach(flash => {
+                flash.style.transition = 'opacity 0.5s ease';
+                flash.style.opacity = '0';
+                setTimeout(() => flash.remove(), 500);
+            });
+        }, 4000);
+    </script>
+</body>
+</html>

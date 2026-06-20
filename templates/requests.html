@@ -1,0 +1,176 @@
+{% extends 'base.html' %}
+
+{% block title %}Medicine Requests - RHIM.PHC{% endblock %}
+{% block header_title %}Medicine Replenishment Requests{% endblock %}
+{% block header_subtitle %}Request emergency and regular pharmaceutical stock from central warehouses.{% endblock %}
+
+{% block content %}
+<!-- Grid: Request Form and Status log -->
+<div class="analytics-grid">
+    
+    <!-- Submit Request Panel -->
+    <div class="glass-panel">
+        <div class="panel-header">
+            <h2>
+                <i data-lucide="plus-circle" style="color: var(--primary); width: 20px; height: 20px;"></i>
+                Create Replenishment Request
+            </h2>
+        </div>
+        <form action="{{ url_for('requests_module') }}" method="POST">
+            <div class="form-group">
+                <label for="req_med">MEDICINE NAME</label>
+                <select id="req_med" name="medicine_name" class="form-control" required>
+                    <option value="">-- Choose Medicine --</option>
+                    {% for med in medicines %}
+                        <option value="{{ med.name }}">{{ med.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="form-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                <div>
+                    <label for="req_qty">REQUIRED QUANTITY</label>
+                    <input type="number" id="req_qty" name="required_quantity" class="form-control" placeholder="Units" min="10" required>
+                </div>
+                <div>
+                    <label for="req_priority">PRIORITY LEVEL</label>
+                    <select id="req_priority" name="priority_level" class="form-control" required>
+                        <option value="Low">Low</option>
+                        <option value="Medium" selected>Medium</option>
+                        <option value="High">High</option>
+                        <option value="Critical">Critical (Immediate Stock Out)</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="req_reason">REASON FOR REQUEST</label>
+                <input type="text" id="req_reason" name="reason" class="form-control" placeholder="e.g. Stock below threshold, local infection outbreak" required>
+            </div>
+            
+            <button type="submit" class="btn btn-primary" style="width: 100%;">
+                <i data-lucide="send" style="width: 16px; height: 16px;"></i>
+                Submit Request to Warehouse
+            </button>
+        </form>
+    </div>
+    
+    <!-- Warehouse Flow Simulator Info -->
+    <div class="glass-panel" style="display: flex; flex-direction: column; justify-content: center; gap: 16px; background: rgba(99, 102, 241, 0.05); border-color: rgba(99, 102, 241, 0.15);">
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--secondary);">
+            <i data-lucide="sparkles" style="width: 16px; height: 16px;"></i>
+            WAREHOUSE SIMULATION ENGINE
+        </div>
+        <div style="font-size: 20px; font-weight: 700; color: var(--text-primary);">
+            Integrated Supply Chain
+        </div>
+        <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.5;">
+            Every request generated is logged in a standardized format consumable by the central RHIM Warehouse & Logistics portal APIs. 
+        </p>
+        <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.5;">
+            To test the end-to-end integration, use the status control button in the request log. Marking a request as <strong>Delivered</strong> will automatically credit the stock to your local PHC inventory!
+        </p>
+    </div>
+</div>
+
+<!-- Requests List -->
+<div class="glass-panel" style="margin-top: 24px;">
+    <div class="panel-header">
+        <h2>
+            <i data-lucide="list-ordered" style="color: var(--primary); width: 20px; height: 20px;"></i>
+            Replenishment Requests Log
+        </h2>
+    </div>
+    
+    {% for req in requests %}
+        <div style="margin-bottom: 24px; padding: 20px; border-radius: 12px; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color);">
+            
+            <!-- Request Meta Row -->
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 20px;">
+                <div>
+                    <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary);">
+                        Req #{{ req.id }}: {{ req.medicine_name }}
+                    </h3>
+                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px; display: flex; gap: 12px;">
+                        <span>Qty: <strong>{{ req.required_quantity }}</strong></span>
+                        <span>Priority: <strong style="color: {% if req.priority_level == 'Critical' %}var(--danger){% elif req.priority_level == 'High' %}var(--warning){% else %}var(--primary){% endif %};">{{ req.priority_level }}</strong></span>
+                        <span>District: {{ req.district }}</span>
+                        <span>By: {{ req.requested_by_name }}</span>
+                    </div>
+                    {% if req.reason %}
+                        <div style="font-size: 12px; color: var(--text-muted); margin-top: 8px; font-style: italic;">
+                            Reason: "{{ req.reason }}"
+                        </div>
+                    {% endif %}
+                </div>
+                
+                <!-- Action Controls (Simulate supply chain response) -->
+                <div>
+                    <div class="role-switcher">
+                        <button class="role-switcher-btn btn-sm">
+                            <i data-lucide="cog" style="width: 12px; height: 12px;"></i>
+                            Simulate State
+                            <i data-lucide="chevron-down" style="width: 12px; height: 12px;"></i>
+                        </button>
+                        <div class="role-dropdown" style="right: 0; left: auto;">
+                            <form action="{{ url_for('api_update_request_status', req_id=req.id) }}" method="POST">
+                                <input type="hidden" name="status" value="Under Review">
+                                <button type="submit" class="role-option" {% if req.status == 'Under Review' or req.status == 'Approved' or req.status == 'Dispatched' or req.status == 'Delivered' %}disabled style="opacity: 0.5; cursor: not-allowed;"{% endif %}>
+                                    Under Review
+                                </button>
+                            </form>
+                            <form action="{{ url_for('api_update_request_status', req_id=req.id) }}" method="POST">
+                                <input type="hidden" name="status" value="Approved">
+                                <button type="submit" class="role-option" {% if req.status == 'Approved' or req.status == 'Dispatched' or req.status == 'Delivered' %}disabled style="opacity: 0.5; cursor: not-allowed;"{% endif %}>
+                                    Approve
+                                </button>
+                            </form>
+                            <form action="{{ url_for('api_update_request_status', req_id=req.id) }}" method="POST">
+                                <input type="hidden" name="status" value="Dispatched">
+                                <button type="submit" class="role-option" {% if req.status == 'Dispatched' or req.status == 'Delivered' %}disabled style="opacity: 0.5; cursor: not-allowed;"{% endif %}>
+                                    Dispatch
+                                </button>
+                            </form>
+                            <form action="{{ url_for('api_update_request_status', req_id=req.id) }}" method="POST">
+                                <input type="hidden" name="status" value="Delivered">
+                                <button type="submit" class="role-option" {% if req.status == 'Delivered' %}disabled style="opacity: 0.5; cursor: not-allowed;"{% endif %}>
+                                    Delivered (Replenish Stock)
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Progress Stepper workflow visualization -->
+            <div class="stepper">
+                <div class="step-node {% if req.status in ['Submitted', 'Under Review', 'Approved', 'Dispatched', 'Delivered'] %}completed{% endif %} {% if req.status == 'Submitted' %}active{% endif %}">
+                    <div class="step-dot">1</div>
+                    <span class="step-label">Submitted</span>
+                </div>
+                <div class="step-node {% if req.status in ['Under Review', 'Approved', 'Dispatched', 'Delivered'] %}completed{% endif %} {% if req.status == 'Under Review' %}active{% endif %}">
+                    <div class="step-dot">2</div>
+                    <span class="step-label">Under Review</span>
+                </div>
+                <div class="step-node {% if req.status in ['Approved', 'Dispatched', 'Delivered'] %}completed{% endif %} {% if req.status == 'Approved' %}active{% endif %}">
+                    <div class="step-dot">3</div>
+                    <span class="step-label">Approved</span>
+                </div>
+                <div class="step-node {% if req.status in ['Dispatched', 'Delivered'] %}completed{% endif %} {% if req.status == 'Dispatched' %}active{% endif %}">
+                    <div class="step-dot">4</div>
+                    <span class="step-label">Dispatched</span>
+                </div>
+                <div class="step-node {% if req.status == 'Delivered' %}completed active{% endif %}">
+                    <div class="step-dot">5</div>
+                    <span class="step-label">Delivered</span>
+                </div>
+            </div>
+            
+        </div>
+    {% else %}
+        <div style="text-align: center; color: var(--text-muted); padding: 48px 0;">
+            No medicine requests logged.
+        </div>
+    {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="RHIM.PHC Primary Health Centre inventory and analytics portal. Connected to the MediReach AI ecosystem.">
+    <title>RHIM.PHC - {{ title | default('Primary Health Centre Portal') }}</title>
+    
+    <!-- Link to custom stylesheets -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    
+    <!-- Chart.js for analytics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <ul class="flashes">
+          {% for category, message in messages %}
+            <li class="flash-message {{ category }}">
+                {{ message }}
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+
+    <!-- Sidebar Navigation -->
+    <aside>
+        <div class="brand-section">
+            <div class="brand-logo">H</div>
+            <div>
+                <div class="brand-name">RHIM.PHC</div>
+                <div class="brand-subtitle">MediReach AI Gateway</div>
+            </div>
+        </div>
+        
+        <nav class="nav-section">
+            <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.path == url_for('dashboard') %}active{% endif %}">
+                <i data-lucide="layout-dashboard"></i>
+                Dashboard
+            </a>
+            <a href="{{ url_for('phc_directory') }}" class="nav-link {% if request.path == url_for('phc_directory') %}active{% endif %}">
+                <i data-lucide="building"></i>
+                PHC Directory
+            </a>
+            <a href="{{ url_for('inventory') }}" class="nav-link {% if request.path == url_for('inventory') %}active{% endif %}">
+                <i data-lucide="package"></i>
+                Medicine Inventory
+            </a>
+            <a href="{{ url_for('patient_demand') }}" class="nav-link {% if request.path == url_for('patient_demand') %}active{% endif %}">
+                <i data-lucide="users"></i>
+                Patient & OPD Demand
+            </a>
+            <a href="{{ url_for('requests_module') }}" class="nav-link {% if request.path == url_for('requests_module') %}active{% endif %}">
+                <i data-lucide="shopping-cart"></i>
+                Medicine Requests
+            </a>
+            <a href="{{ url_for('ai_sync') }}" class="nav-link {% if request.path == url_for('ai_sync') %}active{% endif %}">
+                <i data-lucide="cpu"></i>
+                AI Data Sync
+            </a>
+            <a href="{{ url_for('reports') }}" class="nav-link {% if request.path == url_for('reports') %}active{% endif %}">
+                <i data-lucide="file-bar-chart"></i>
+                Reports & Analytics
+            </a>
+        </nav>
+        
+        <div class="sidebar-user">
+            <div class="user-info">
+                <div class="user-name">{{ session.get('full_name', 'Mock User') }}</div>
+                <div class="user-role">{{ session.get('role', 'Supervisor') }}</div>
+            </div>
+            <a href="{{ url_for('logout') }}" class="btn-logout">
+                <i data-lucide="log-out" style="width: 14px; height: 14px;"></i>
+                Log Out
+            </a>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main>
+        <header>
+            <div class="header-title">
+                <h1>{% block header_title %}Primary Health Centre Portal{% endblock %}</h1>
+                <p>{% block header_subtitle %}Overview and real-time operations dashboard.{% endblock %}</p>
+            </div>
+            
+            <div class="header-actions">
+                <div class="phc-badge" style="font-size: 12px; font-weight: 500;">
+                    <i data-lucide="map-pin" style="width: 14px; height: 14px;"></i>
+                    <span>{{ session.get('phc_name', 'Kanakapura PHC') }} | {{ session.get('phc_code', 'PHC-KAN-001') }} | {{ session.get('phc_district', 'Ramanagara') }}</span>
+                </div>
+                
+                <!-- Demo Prev/Next Controls & Searchable PHC Switcher -->
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <!-- Prev Button -->
+                    <a href="{{ url_for('prev_phc') }}" class="role-switcher-btn" style="padding: 8px 10px; text-decoration: none;" title="Previous PHC (Demo)">
+                        <i data-lucide="chevron-left" style="width: 14px; height: 14px;"></i>
+                    </a>
+                    
+                    <!-- Searchable Dropdown -->
+                    <div class="role-switcher" style="position: relative;">
+                        <button class="role-switcher-btn" id="phcSwitcherBtn" onclick="togglePHCDropdown(event)">
+                            <i data-lucide="building" style="width: 14px; height: 14px;"></i>
+                            Switch PHC ({{ all_phcs|length }} Connected)
+                            <i data-lucide="chevron-down" style="width: 14px; height: 14px;"></i>
+                        </button>
+                        <div class="role-dropdown" id="phcDropdownMenu" style="width: 320px; right: 0; left: auto; max-height: 400px; overflow-y: hidden; display: none; flex-direction: column; top: 100%; margin-top: 8px; position: absolute; background: var(--bg-sidebar); border: 1px solid var(--border-color); border-radius: 8px; z-index: 150; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);">
+                            <!-- Search input -->
+                            <div style="padding: 10px; border-bottom: 1px solid var(--border-color); background: rgba(0,0,0,0.2);">
+                                <input type="text" id="phcSearchInput" class="form-control" placeholder="Search PHC name, code, district..." onkeyup="searchPHCs()" style="font-size: 12px; padding: 6px 10px;">
+                            </div>
+                            <!-- List container -->
+                            <div id="phcSwitcherList" style="overflow-y: auto; max-height: 300px; display: flex; flex-direction: column;">
+                                {% for phc in all_phcs %}
+                                    <a href="{{ url_for('switch_phc', new_phc_id=phc.id) }}" class="role-option phc-option-item" data-search="{{ phc.name|lower }} {{ phc.code|lower }} {{ phc.district|lower }}" style="display: flex; flex-direction: column; gap: 4px; padding: 10px 16px; border-bottom: 1px solid rgba(255,255,255,0.02); text-decoration: none;">
+                                        <div style="font-weight: 600; font-size: 13px; color: var(--text-primary);">{{ phc.name }}</div>
+                                        <div style="font-size: 11px; color: var(--text-secondary); display: flex; justify-content: space-between;">
+                                            <span>Code: {{ phc.code }}</span>
+                                            <span>Dist: {{ phc.district }}</span>
+                                        </div>
+                                    </a>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Next Button -->
+                    <a href="{{ url_for('next_phc') }}" class="role-switcher-btn" style="padding: 8px 10px; text-decoration: none;" title="Next PHC (Demo)">
+                        <i data-lucide="chevron-right" style="width: 14px; height: 14px;"></i>
+                    </a>
+                </div>
+                
+                <!-- Role Switcher (Simulation utility) -->
+                <div class="role-switcher">
+                    <button class="role-switcher-btn">
+                        <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i>
+                        Simulate: {{ session.get('role', 'Supervisor') }}
+                        <i data-lucide="chevron-down" style="width: 14px; height: 14px;"></i>
+                    </button>
+                    <div class="role-dropdown">
+                        <a href="{{ url_for('switch_role', role='Supervisor') }}" class="role-option">PHC Supervisor</a>
+                        <a href="{{ url_for('switch_role', role='Medical Officer') }}" class="role-option">Medical Officer</a>
+                        <a href="{{ url_for('switch_role', role='Data Entry Operator') }}" class="role-option">Data Entry Operator</a>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+        
+        // Auto-dismiss Flash Alerts
+        setTimeout(function() {
+            const flashes = document.querySelectorAll('.flash-message');
+            flashes.forEach(flash => {
+                flash.style.transition = 'opacity 0.5s ease';
+                flash.style.opacity = '0';
+                setTimeout(() => flash.remove(), 500);
+            });
+        }, 4000);
+
+        // PHC Switcher Interactivity
+        function togglePHCDropdown(event) {
+            const dropdown = document.getElementById('phcDropdownMenu');
+            const displayState = dropdown.style.display;
+            dropdown.style.display = displayState === 'flex' ? 'none' : 'flex';
+            if (dropdown.style.display === 'flex') {
+                document.getElementById('phcSearchInput').value = '';
+                searchPHCs();
+                document.getElementById('phcSearchInput').focus();
+            }
+            event.stopPropagation();
+        }
+        
+        function searchPHCs() {
+            const val = document.getElementById('phcSearchInput').value.toLowerCase();
+            const items = document.querySelectorAll('.phc-option-item');
+            items.forEach(item => {
+                const searchStr = item.getAttribute('data-search');
+                if (searchStr.includes(val)) {
+                    item.style.setProperty('display', 'flex', 'important');
+                } else {
+                    item.style.setProperty('display', 'none', 'important');
+                }
+            });
+        }
+        
+        // Close dropdown when clicking elsewhere
+        document.addEventListener('click', function(event) {
+            const dropdown = document.getElementById('phcDropdownMenu');
+            const btn = document.getElementById('phcSwitcherBtn');
+            if (dropdown && !dropdown.contains(event.target) && !btn.contains(event.target)) {
+                dropdown.style.display = 'none';
+            }
+        });
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

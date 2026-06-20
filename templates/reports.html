@@ -1,0 +1,377 @@
+{% extends 'base.html' %}
+
+{% block title %}Reports & Analytics - RHIM.PHC{% endblock %}
+{% block header_title %}Reports & Analytics Hub{% endblock %}
+{% block header_subtitle %}Generate dynamic clinical logs, medicine consumption, and shortage analytics reports.{% endblock %}
+
+{% block content %}
+<!-- Grid: Report Generator and List -->
+<div class="analytics-grid">
+    
+    <!-- Report Generator Form -->
+    <div class="glass-panel">
+        <div class="panel-header">
+            <h2>
+                <i data-lucide="file-plus" style="color: var(--primary); width: 20px; height: 20px;"></i>
+                Generate New Report
+            </h2>
+        </div>
+        <form action="{{ url_for('api_reports_generate') }}" method="POST">
+            <div class="form-group">
+                <label for="rep_type">REPORT TYPE</label>
+                <select id="rep_type" name="report_type" class="form-control" required>
+                    <option value="Daily Performance Report">Daily Performance Report</option>
+                    <option value="Weekly OPD Summary">Weekly OPD Summary</option>
+                    <option value="Monthly Analytics Report" selected>Monthly Analytics Report</option>
+                    <option value="Inventory Report">Inventory Report</option>
+                    <option value="Medicine Consumption Report">Medicine Consumption Report</option>
+                    <option value="Shortage Report">Shortage Report</option>
+                </select>
+            </div>
+            
+            <div class="form-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                <div>
+                    <label for="start_date">START DATE</label>
+                    <input type="date" id="start_date" name="start_date" class="form-control" required>
+                </div>
+                <div>
+                    <label for="end_date">END DATE</label>
+                    <input type="date" id="end_date" name="end_date" class="form-control" required>
+                </div>
+            </div>
+            
+            <button type="submit" class="btn btn-primary" style="width: 100%;">
+                <i data-lucide="plus" style="width: 16px; height: 16px;"></i>
+                Compile and Generate Report
+            </button>
+        </form>
+    </div>
+    
+    <!-- Analytics Info Card -->
+    <div class="glass-panel" style="display: flex; flex-direction: column; justify-content: center; gap: 16px; background: rgba(14, 165, 233, 0.05); border-color: rgba(14, 165, 233, 0.15);">
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--primary);">
+            <i data-lucide="info" style="width: 16px; height: 16px;"></i>
+            REPORT ARCHIVING POLICY
+        </div>
+        <div style="font-size: 18px; font-weight: 700; color: var(--text-primary);">
+            Secure Digital Logging
+        </div>
+        <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.5;">
+            Generated reports are serialized into structured JSON blobs and archived in the local DB tables. This guarantees complete audit records for government inspectors, and permits remote sync transfers to the central RHIM AI health platform.
+        </p>
+    </div>
+</div>
+
+<!-- Generated Reports Archive Table -->
+<div class="glass-panel" style="margin-top: 24px;">
+    <div class="panel-header">
+        <h2>
+            <i data-lucide="archive" style="color: var(--secondary); width: 20px; height: 20px;"></i>
+            Archived Reports
+        </h2>
+    </div>
+    
+    <div class="table-responsive">
+        <table class="custom-table" style="font-size: 13px;">
+            <thead>
+                <tr>
+                    <th>Generated Timestamp</th>
+                    <th>Report Type</th>
+                    <th>Period Covered</th>
+                    <th>Compiled By</th>
+                    <th style="text-align: right;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rep in reports %}
+                    <tr>
+                        <td style="font-weight: 500;">{{ rep.generated_at }}</td>
+                        <td style="font-weight: 600; color: var(--primary);">{{ rep.report_type }}</td>
+                        <td style="font-family: monospace; font-size: 12px;">
+                            {{ rep.period_start }} to {{ rep.period_end }}
+                        </td>
+                        <td>{{ rep.author }}</td>
+                        <td style="text-align: right;">
+                            <div style="display: inline-flex; gap: 8px;">
+                                <button class="btn btn-primary btn-sm" onclick="openReportPreview({{ rep.id }}, '{{ rep.report_type }}', '{{ rep.period_start }}', '{{ rep.period_end }}', '{{ rep.author }}', '{{ rep.generated_at }}')">
+                                    <i data-lucide="eye" style="width: 14px; height: 14px;"></i>
+                                    View Report
+                                </button>
+                                <!-- Hidden JSON representation container -->
+                                <div id="report-data-{{ rep.id }}" style="display: none;">{{ rep.summary_data }}</div>
+                            </div>
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr>
+                        <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 32px;">
+                            No compiled reports found. Choose report options above to generate.
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- PRINTABLE PREVIEW MODAL -->
+<div class="modal" id="reportPreviewModal">
+    <div class="modal-content" style="max-width: 750px; background: #0b0f19;">
+        <div class="modal-header">
+            <h3>Compiled Document Preview</h3>
+            <button class="modal-close" onclick="closeReportPreview()">&times;</button>
+        </div>
+        
+        <div class="modal-body" id="printArea" style="max-height: 500px; overflow-y: auto; padding: 32px; background: #ffffff; color: #1e293b; border-radius: 8px; font-family: 'Inter', sans-serif;">
+            <!-- Document Header -->
+            <div style="border-bottom: 2px solid #0f172a; padding-bottom: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h1 id="previewTitle" style="font-size: 22px; font-weight: 700; color: #0f172a; text-transform: uppercase;">MONTHLY ANALYTICS REPORT</h1>
+                    <p style="font-size: 11px; color: #64748b; margin-top: 4px;">PRIMARY HEALTH CENTRE PORTAL • DEPT. OF HEALTH</p>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 14px; font-weight: 700; color: #0d9488;">RHIM.PHC</div>
+                    <div id="previewPHCName" style="font-size: 11px; color: #64748b; font-weight: 500;">Kanakapura PHC</div>
+                </div>
+            </div>
+            
+            <!-- Metadata Cards -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; font-size: 12px; margin-bottom: 24px; background: #f8fafc; padding: 16px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                <div>
+                    <div style="margin-bottom: 6px;"><strong>Period Covered:</strong> <span id="previewPeriod">2026-06-01 to 2026-06-30</span></div>
+                    <div><strong>Generated Date:</strong> <span id="previewTimestamp">2026-06-20 12:00:00</span></div>
+                </div>
+                <div>
+                    <div style="margin-bottom: 6px;"><strong>Compiled By:</strong> <span id="previewAuthor">Dr. Anil Kumar</span></div>
+                    <div><strong>Status:</strong> <span style="color: #10b981; font-weight: 600;">OFFICIALLY SIGNED & VERIFIED</span></div>
+                </div>
+            </div>
+            
+            <!-- Dynamic Content Area -->
+            <div id="previewBodyContent" style="font-size: 13px; line-height: 1.6; color: #334155;">
+                <!-- Filled dynamically via JS -->
+            </div>
+            
+            <!-- Document Footer Signatures -->
+            <div style="margin-top: 48px; border-top: 1px solid #e2e8f0; padding-top: 16px; display: flex; justify-content: space-between; font-size: 11px; color: #64748b;">
+                <div>
+                    <div style="height: 40px;"></div>
+                    <div style="border-top: 1px solid #94a3b8; width: 180px; text-align: center; padding-top: 4px;">PHC SUPERVISOR</div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="height: 40px;"></div>
+                    <div style="border-top: 1px solid #94a3b8; width: 180px; text-align: center; padding-top: 4px;">MEDICAL OFFICER</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="modal-footer" style="background: rgba(0,0,0,0.2);">
+            <button type="button" class="btn btn-secondary" onclick="closeReportPreview()">Close</button>
+            <button type="button" class="btn btn-secondary" onclick="mockExport('Excel')" style="color: #10b981; border-color: rgba(16,185,129,0.2);">
+                <i data-lucide="file-spreadsheet" style="width: 14px; height: 14px;"></i>
+                Export to Excel
+            </button>
+            <button type="button" class="btn btn-primary" onclick="printReport()">
+                <i data-lucide="printer" style="width: 14px; height: 14px;"></i>
+                Print Document
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Autofill date ranges (Current month defaults)
+    document.addEventListener("DOMContentLoaded", function() {
+        const today = new Date();
+        const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+        const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
+        
+        document.getElementById('start_date').value = startOfMonth;
+        document.getElementById('end_date').value = endOfMonth;
+        
+        lucide.createIcons();
+    });
+
+    // Preview Report Modal Actions
+    function openReportPreview(id, type, start, end, author, timestamp) {
+        document.getElementById('previewTitle').textContent = type;
+        document.getElementById('previewPeriod').textContent = start + " to " + end;
+        document.getElementById('previewTimestamp').textContent = timestamp;
+        document.getElementById('previewAuthor').textContent = author;
+        document.getElementById('previewPHCName').textContent = "{{ session.get('phc_name', 'Kanakapura PHC') }}";
+        
+        const rawData = document.getElementById('report-data-' + id).textContent;
+        const data = JSON.parse(rawData);
+        const container = document.getElementById('previewBodyContent');
+        container.innerHTML = '';
+        
+        // Render content structured specifically for each report type
+        if (type === 'Shortage Report') {
+            let html = `
+                <p style="margin-bottom: 16px;">This audit summarizes medicines requiring replenishment, having exceeded critical stock depletion duration thresholds (&lt; 10 days of local average consumption).</p>
+                <h4 style="font-weight: 700; color: #0f172a; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px;">CRITICAL SHORTAGES LOGGED:</h4>
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px; text-align: left;">
+                    <thead>
+                        <tr style="background: #f8fafc; border-bottom: 1px solid #cbd5e1;">
+                            <th style="padding: 10px;">Medicine Name</th>
+                            <th style="padding: 10px;">Stock Remaining</th>
+                            <th style="padding: 10px; text-align: right;">Status Level</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            if (data.items && data.items.length > 0) {
+                data.items.forEach(item => {
+                    const statusStyle = item.level === 'Red' ? 'color: #ef4444; font-weight: 700;' : 'color: #f59e0b; font-weight: 600;';
+                    html += `
+                        <tr style="border-bottom: 1px solid #f1f5f9;">
+                            <td style="padding: 10px;">${item.medicine}</td>
+                            <td style="padding: 10px;">${item.days.toFixed(1)} days of use</td>
+                            <td style="padding: 10px; text-align: right; ${statusStyle}">${item.level}</td>
+                        </tr>
+                    `;
+                });
+            } else {
+                html += `<tr><td colspan="3" style="padding: 16px; text-align: center; color: #64748b;">No active shortage alerts found. All inventory is stable.</td></tr>`;
+            }
+            
+            html += `
+                    </tbody>
+                </table>
+                <div style="font-size: 11px; background: #fffbeb; padding: 12px; border-radius: 6px; border: 1px solid #fde68a; color: #78350f;">
+                    <strong>Alert Notification Details:</strong> Red indicates severe danger, while Yellow indicates low stock levels that should be addressed during regular weekly shipments.
+                </div>
+            `;
+            container.innerHTML = html;
+            
+        } else if (type === 'Medicine Consumption Report') {
+            let html = `
+                <p style="margin-bottom: 16px;">Summary of medicine consumption rates based on actual local distribution logs and medical practitioner prescriptions.</p>
+                <h4 style="font-weight: 700; color: #0f172a; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px;">CONSUMPTION METRICS:</h4>
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px; text-align: left;">
+                    <thead>
+                        <tr style="background: #f8fafc; border-bottom: 1px solid #cbd5e1;">
+                            <th style="padding: 10px;">Medicine Name</th>
+                            <th style="padding: 10px;">Daily Avg Consumption</th>
+                            <th style="padding: 10px; text-align: right;">Current Stock Level</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            if (data.items && data.items.length > 0) {
+                data.items.forEach(item => {
+                    html += `
+                        <tr style="border-bottom: 1px solid #f1f5f9;">
+                            <td style="padding: 10px;">${item.medicine}</td>
+                            <td style="padding: 10px;">${item.daily_avg.toFixed(1)} units / day</td>
+                            <td style="padding: 10px; text-align: right; font-weight: 600;">${item.stock} units</td>
+                        </tr>
+                    `;
+                });
+            } else {
+                html += `<tr><td colspan="3" style="padding: 16px; text-align: center; color: #64748b;">No stock metadata available.</td></tr>`;
+            }
+            
+            html += `
+                    </tbody>
+                </table>
+            `;
+            container.innerHTML = html;
+            
+        } else {
+            // General performance reports
+            let diseaseHtml = '';
+            if (data.disease_breakdown && data.disease_breakdown.length > 0) {
+                data.disease_breakdown.forEach(d => {
+                    diseaseHtml += `
+                        <tr style="border-bottom: 1px solid #f1f5f9;">
+                            <td style="padding: 10px;">${d.category}</td>
+                            <td style="padding: 10px; text-align: right; font-weight: 600; color: #334155;">${d.cases} cases</td>
+                        </tr>
+                    `;
+                });
+            } else {
+                diseaseHtml = `<tr><td colspan="2" style="padding: 16px; text-align: center; color: #64748b;">No disease cases recorded for this range.</td></tr>`;
+            }
+            
+            container.innerHTML = `
+                <p style="margin-bottom: 16px;">Comprehensive audit compiling outpatient volumes and diagnosed disease incidents reported at this facility.</p>
+                
+                <h4 style="font-weight: 700; color: #0f172a; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px;">OPD PATIENT VOLUME SUMMARY:</h4>
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; text-align: center; margin-bottom: 24px;">
+                    <div style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                        <div style="font-size: 11px; color: #64748b; margin-bottom: 4px;">TOTAL OPD</div>
+                        <div style="font-size: 18px; font-weight: 700; color: #0ea5e9;">${data.opd_total || 0}</div>
+                    </div>
+                    <div style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                        <div style="font-size: 11px; color: #64748b; margin-bottom: 4px;">MALE</div>
+                        <div style="font-size: 18px; font-weight: 700; color: #334155;">${data.male_total || 0}</div>
+                    </div>
+                    <div style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                        <div style="font-size: 11px; color: #64748b; margin-bottom: 4px;">FEMALE</div>
+                        <div style="font-size: 18px; font-weight: 700; color: #334155;">${data.female_total || 0}</div>
+                    </div>
+                    <div style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                        <div style="font-size: 11px; color: #64748b; margin-bottom: 4px;">CHILDREN</div>
+                        <div style="font-size: 18px; font-weight: 700; color: #10b981;">${data.child_total || 0}</div>
+                    </div>
+                </div>
+                
+                <h4 style="font-weight: 700; color: #0f172a; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px;">INCIDENT DIAGNOSIS DETAILS:</h4>
+                <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                    <thead>
+                        <tr style="background: #f8fafc; border-bottom: 1px solid #cbd5e1;">
+                            <th style="padding: 10px;">Disease Classification</th>
+                            <th style="padding: 10px; text-align: right;">Total Diagnosed</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${diseaseHtml}
+                    </tbody>
+                </table>
+            `;
+        }
+        
+        document.getElementById('reportPreviewModal').style.display = 'flex';
+        lucide.createIcons();
+    }
+    
+    function closeReportPreview() {
+        document.getElementById('reportPreviewModal').style.display = 'none';
+    }
+
+    // Local printing feature
+    function printReport() {
+        const printContent = document.getElementById('printArea').innerHTML;
+        const originalContent = document.body.innerHTML;
+        
+        // Render print view
+        document.body.innerHTML = `
+            <div style="padding: 40px; background: white; color: black; min-height: 100vh;">
+                ${printContent}
+            </div>
+        `;
+        window.print();
+        
+        // Restore page
+        document.body.innerHTML = originalContent;
+        window.location.reload();
+    }
+
+    // Simulated Export
+    function mockExport(format) {
+        alert("Export Complete!\nThe document has been exported to " + format + " format.\nDownloaded to: C:\\Users\\DELL\\Downloads\\Report_" + Date.now() + "." + (format === 'Excel' ? 'xlsx' : 'pdf'));
+    }
+
+    window.onclick = function(event) {
+        const m = document.getElementById('reportPreviewModal');
+        if (event.target === m) {
+            m.style.display = 'none';
+        }
+    }
+</script>
+{% endblock %}

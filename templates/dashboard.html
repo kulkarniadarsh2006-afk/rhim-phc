@@ -1,0 +1,287 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - RHIM.PHC{% endblock %}
+{% block header_title %}PHC Dashboard{% endblock %}
+{% block header_subtitle %}Overview of local medicine availability and health center diagnostics.{% endblock %}
+
+{% block content %}
+<!-- Metrics Cards Grid -->
+<div class="metrics-grid">
+    <div class="glass-panel metric-card">
+        <div class="metric-icon blue">
+            <i data-lucide="package"></i>
+        </div>
+        <div class="metric-details">
+            <span class="metric-label">Medicines Available</span>
+            <span class="metric-value">{{ total_meds }}</span>
+        </div>
+    </div>
+    
+    <div class="glass-panel metric-card">
+        <div class="metric-icon yellow">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div class="metric-details">
+            <span class="metric-label">Low Stock Items</span>
+            <span class="metric-value">{{ low_stock }}</span>
+        </div>
+    </div>
+    
+    <div class="glass-panel metric-card">
+        <div class="metric-icon red">
+            <i data-lucide="activity"></i>
+        </div>
+        <div class="metric-details">
+            <span class="metric-label">Critical Shortages</span>
+            <span class="metric-value">{{ critical_shortages }}</span>
+        </div>
+    </div>
+    
+    <div class="glass-panel metric-card">
+        <div class="metric-icon indigo">
+            <i data-lucide="truck"></i>
+        </div>
+        <div class="metric-details">
+            <span class="metric-label">Pending Requests</span>
+            <span class="metric-value">{{ pending_requests }}</span>
+        </div>
+    </div>
+    
+    <div class="glass-panel metric-card">
+        <div class="metric-icon blue" style="background: rgba(99, 102, 241, 0.1); color: var(--secondary); border: 1px solid rgba(99, 102, 241, 0.2);">
+            <i data-lucide="building"></i>
+        </div>
+        <div class="metric-details">
+            <span class="metric-label">Network PHCs</span>
+            <span class="metric-value">{{ total_phcs }}</span>
+        </div>
+    </div>
+</div>
+
+<!-- Primary Analytics Section (Chart & Alerts) -->
+<div class="analytics-grid">
+    
+    <!-- Medicine Consumption Chart -->
+    <div class="glass-panel">
+        <div class="panel-header">
+            <h2>
+                <i data-lucide="bar-chart-3" style="color: var(--primary); width: 20px; height: 20px;"></i>
+                Monthly Consumption Analytics
+            </h2>
+            <div style="font-size: 12px; color: var(--text-secondary);">Real-time daily averages</div>
+        </div>
+        <div class="chart-container">
+            <canvas id="consumptionChart"></canvas>
+        </div>
+    </div>
+    
+    <!-- Active Alerts and AI Suggestions -->
+    <div class="glass-panel">
+        <div class="panel-header">
+            <h2>
+                <i data-lucide="alert-circle" style="color: var(--danger); width: 20px; height: 20px;"></i>
+                Active Alerts & AI Insights
+            </h2>
+        </div>
+        <div class="alerts-list">
+            {% if active_alerts %}
+                {% for alert in active_alerts %}
+                    <div class="alert-item {{ alert.alert_level }}">
+                        <i data-lucide="{% if alert.alert_level == 'Red' %}shield-alert{% else %}alert-triangle{% endif %}" class="alert-icon"></i>
+                        <div class="alert-desc">
+                            <span class="alert-text">{{ alert.status_message }}</span>
+                            <span class="alert-meta">Detected: {{ alert.created_at }}</span>
+                        </div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div class="empty-alerts">
+                    <i data-lucide="check-circle" style="width: 32px; height: 32px; color: var(--success); margin-bottom: 8px;"></i>
+                    <div>All stocks are at safe levels. No alerts.</div>
+                </div>
+            {% endif %}
+            
+            <!-- AI Recommendation Section -->
+            <div style="margin-top: 12px; padding: 14px; border-radius: 8px; background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.2);">
+                <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--secondary); margin-bottom: 8px;">
+                    <i data-lucide="sparkles" style="width: 16px; height: 16px;"></i>
+                    RHIM AI RECOMMENDATION
+                </div>
+                <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.4;">
+                    {% if critical_shortages > 0 %}
+                        <strong>Urgent action needed</strong>: Request immediate restocking of red-alert items. Shortages predicted to interrupt OPD operations within 4-6 days.
+                    {% else %}
+                        Monsoon trends predict a <strong>15% spike in water-borne cases</strong> next month. Suggest increasing the minimum threshold stock for ORS Sachets to 350.
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Secondary Analytics Section (Disease trends & History) -->
+<div class="analytics-grid" style="margin-top: 24px;">
+    
+    <!-- Seasonal Disease Trends -->
+    <div class="glass-panel">
+        <div class="panel-header">
+            <h2>
+                <i data-lucide="trending-up" style="color: var(--secondary); width: 20px; height: 20px;"></i>
+                Seasonal Disease Trends
+            </h2>
+            <div style="font-size: 12px; color: var(--text-secondary);">Weekly case breakdown</div>
+        </div>
+        <div class="chart-container">
+            <canvas id="diseaseChart"></canvas>
+        </div>
+    </div>
+    
+    <!-- Recent Inventory Logs -->
+    <div class="glass-panel">
+        <div class="panel-header">
+            <h2>
+                <i data-lucide="history" style="color: var(--primary); width: 20px; height: 20px;"></i>
+                Recent Inventory Logs
+            </h2>
+        </div>
+        
+        <div class="table-responsive">
+            <table class="custom-table" style="font-size: 12px;">
+                <thead>
+                    <tr>
+                        <th>Medicine</th>
+                        <th>Type</th>
+                        <th>Qty</th>
+                        <th>User</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in recent_updates %}
+                        <tr>
+                            <td style="font-weight: 500;">{{ log.medicine_name }}</td>
+                            <td>
+                                <span class="badge {% if log.change_type == 'ADD' %}badge-success{% elif log.change_type == 'DISPENSE' %}badge-info{% else %}badge-warning{% endif %}">
+                                    {{ log.change_type }}
+                                </span>
+                            </td>
+                            <td style="font-weight: 600;">
+                                {% if log.quantity_changed > 0 %}+{% endif %}{{ log.quantity_changed }}
+                            </td>
+                            <td style="color: var(--text-secondary);">{{ log.user_name }}</td>
+                        </tr>
+                    {% else %}
+                        <tr>
+                            <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 24px;">
+                                No recent inventory actions.
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // 1. Consumption Chart Initialization
+    const ctx1 = document.getElementById('consumptionChart').getContext('2d');
+    new Chart(ctx1, {
+        type: 'bar',
+        data: {
+            labels: ['Paracetamol', 'Amoxicillin', 'Metformin', 'Cetirizine', 'ORS Sachet', 'Cough Syrup', 'Amlodipine', 'Ibuprofen'],
+            datasets: [{
+                label: 'Daily Avg Consumption (Units)',
+                data: [45, 25, 15, 12, 20, 8, 10, 15],
+                backgroundColor: 'rgba(14, 165, 233, 0.45)',
+                borderColor: '#0ea5e9',
+                borderWidth: 2,
+                borderRadius: 4
+            }, {
+                label: 'Min Safe Threshold (Units/10)',
+                data: [50, 40, 30, 30, 25, 10, 20, 30], // scaled by 10 for visibility
+                type: 'line',
+                borderColor: '#6366f1',
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                pointBackgroundColor: '#6366f1',
+                tension: 0.3
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    labels: { color: '#94a3b8', font: { family: 'Inter', size: 11 } }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: 'rgba(255,255,255,0.03)' },
+                    ticks: { color: '#94a3b8', font: { family: 'Inter' } }
+                },
+                y: {
+                    grid: { color: 'rgba(255,255,255,0.03)' },
+                    ticks: { color: '#94a3b8', font: { family: 'Inter' } }
+                }
+            }
+        }
+    });
+
+    // 2. Disease Trends Chart Initialization
+    const ctx2 = document.getElementById('diseaseChart').getContext('2d');
+    new Chart(ctx2, {
+        type: 'line',
+        data: {
+            labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+            datasets: [
+                {
+                    label: 'Respiratory Infections',
+                    data: [65, 58, 42, 35, 24, 30],
+                    borderColor: '#0ea5e9',
+                    backgroundColor: 'rgba(14, 165, 233, 0.05)',
+                    fill: true,
+                    tension: 0.4
+                },
+                {
+                    label: 'Water-borne (Diarrhea)',
+                    data: [15, 18, 20, 32, 45, 40],
+                    borderColor: '#f59e0b',
+                    backgroundColor: 'rgba(245, 158, 11, 0.05)',
+                    fill: true,
+                    tension: 0.4
+                },
+                {
+                    label: 'Vector-borne (Malaria/Dengue)',
+                    data: [4, 6, 8, 14, 28, 30],
+                    borderColor: '#ef4444',
+                    backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                    fill: true,
+                    tension: 0.4
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    labels: { color: '#94a3b8', font: { family: 'Inter', size: 11 } }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: 'rgba(255,255,255,0.03)' },
+                    ticks: { color: '#94a3b8', font: { family: 'Inter' } }
+                },
+                y: {
+                    grid: { color: 'rgba(255,255,255,0.03)' },
+                    ticks: { color: '#94a3b8', font: { family: 'Inter' } }
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

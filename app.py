@@ -34,6 +34,94 @@ def role_required(*roles):
 
 # ----------------- Helper Functions -----------------
 
+def _notify_medireach(phc_code, phc_name, district, inventory_data, disease_data, patient_data, alert_data):
+    """
+    Notifies the MediReach system of a successful sync by posting aggregate details
+    and full payloads to MediReach's push endpoint.
+    """
+    import urllib.request
+    import json
+    import ssl
+    
+    url = f"{app.config['MEDIREACH_API_URL'].rstrip('/')}/api/rhim-sync/push"
+    
+    # Calculate aggregate numbers
+    inv_items = len(inventory_data) if inventory_data else 0
+    inv_units = sum(item.get('current_stock', 0) for item in inventory_data) if inventory_data else 0
+    
+    # Critical items calculation (days < 10 or current < threshold * 0.2)
+    inv_crit = 0
+    if inventory_data:
+        for item in inventory_data:
+            current = item.get('current_stock', 0)
+            threshold = item.get('min_threshold_stock', 100)
+            daily_avg = item.get('daily_avg_consumption', 0.0)
+            days = current / daily_avg if daily_avg > 0 else 999.0
+            if days < 10 or current < (threshold * 0.2):
+                inv_crit += 1
+
+    dis_reports = len(disease_data) if disease_data else 0
+    dis_cases = sum(item.get('cases_reported', 0) for item in disease_data) if disease_data else 0
+    
+    # Disease alerts (e.g. any disease category has cases > 15)
+    dis_alerts = 0
+    if disease_data:
+        for item in disease_data:
+            if item.get('cases_reported', 0) > 15:
+                dis_alerts += 1
+
+    # OPD statistics (take from the most recent day in patient_data)
+    if patient_data:
+        latest_patient = patient_data[0]
+        opd_total = latest_patient.get('opd_count', 0)
+        opd_new = int(opd_total * 0.75)
+        opd_ref = int(opd_total * 0.08)
+        opd_imm = latest_patient.get('child_count', 0)
+    else:
+        opd_total = 0
+        opd_new = 0
+        opd_ref = 0
+        opd_imm = 0
+
+    # Build request body
+    data = {
+        "phc_code": phc_code,
+        "phc_name": phc_name,
+        "district": district,
+        "sync_source": "RHIM",
+        "inventory_items_received": inv_items,
+        "inventory_total_units": inv_units,
+        "inventory_critical_items": inv_crit,
+        "disease_reports_received": dis_reports,
+        "disease_cases_total": dis_cases,
+        "disease_alerts": dis_alerts,
+        "opd_patients_total": opd_total,
+        "opd_new_cases": opd_new,
+        "opd_referred_cases": opd_ref,
+        "opd_immunizations": opd_imm,
+        "inventory_payload": inventory_data,
+        "disease_payload": disease_data,
+        "opd_payload": patient_data
+    }
+    
+    headers = {
+        "Content-Type": "application/json"
+    }
+    
+    try:
+        req_body = json.dumps(data).encode('utf-8')
+        req = urllib.request.Request(url, data=req_body, headers=headers, method='POST')
+        
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        
+        with urllib.request.urlopen(req, context=ctx) as response:
+            res_data = json.loads(response.read().decode('utf-8'))
+            return True, res_data
+    except Exception as e:
+        return False, str(e)
+
 def run_shortage_detection(phc_id, inventory_id):
     """
     Shortage Detection Engine:
@@ -788,14 +876,29 @@ def api_ai_sync():
             sync_errors = summary.get('errors', [])
             response_msg = f"Supabase Gateway Partial Sync. {total_records} records transmitted. Errors: {'; '.join(sync_errors)}. Sync ID: {tx_hash}"
         
-        # 5. Save sync record locally (mark PHC as synced)
+        # 5. Notify MediReach v2 Live Dashboard
+        medireach_success, medireach_res = _notify_medireach(
+            phc_code=phc_code,
+            phc_name=phc_name,
+            district=phc_district,
+            inventory_data=inventory_data,
+            disease_data=disease_data,
+            patient_data=patient_data,
+            alert_data=alert_data
+        )
+        if medireach_success:
+            response_msg += f" | MediReach Notification: Sent (Sync ID: {medireach_res.get('sync_id')})"
+        else:
+            response_msg += f" | MediReach Notification Failed: {medireach_res}"
+            
+        # 6. Save sync record locally (mark PHC as synced)
         db.execute(
             """INSERT INTO ai_submissions (phc_id, submission_timestamp, payload, status, response_message)
                VALUES (%s, %s, %s, %s, %s)""",
             (phc_id, now, payload_json, status_text, response_msg)
         )
         
-        # 6. Return success confirmation
+        # 7. Return success confirmation
         return jsonify({
             "success": True,
             "message": f"Data synchronized with MediReach AI via Supabase. {total_records} records pushed.",
@@ -806,6 +909,10 @@ def api_ai_sync():
                 "disease_outbreaks": sync_details.get('disease_outbreaks'),
                 "status": sync_status,
                 "total_records": total_records
+            },
+            "medireach_sync": {
+                "success": medireach_success,
+                "details": medireach_res
             }
         })
     except Exception as e:

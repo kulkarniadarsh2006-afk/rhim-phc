@@ -236,6 +236,15 @@
                             }
                         }
                         
+                        if (data.medireach_sync) {
+                            const ms = data.medireach_sync;
+                            if (ms.success) {
+                                addLog(`<span style="color: #10b981;">✓ MediReach Live Dashboard Notification Sent (ID: ${ms.details.sync_id})</span>`);
+                            } else {
+                                addLog(`<span style="color: #f59e0b;">⚠ MediReach Notification Bypass/Error: ${ms.details}</span>`);
+                            }
+                        }
+                        
                         addLog(`<span style="color: #4ade80;">Local sync transaction log updated.</span>`);
                         addLog(`<span style="color: #4ade80;">PHC marked as synced. ✓</span>`);
                         
